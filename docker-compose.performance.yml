@@ -1,0 +1,39 @@
+services:
+  bliss-os:
+    build:
+      context: .
+      dockerfile: Dockerfile.bliss
+    privileged: true
+    shm_size: 4gb
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    environment:
+      - VNCPASS=admin
+      - blissPASS=admin
+      - LISTENPORT=8000
+      - WEB_PORT=8080
+      - DISPLAY_WIDTH=1920
+      - DISPLAY_HEIGHT=1080
+      - MEMORY=12288  # 12GB RAM for maximum performance
+      - CPUS=6        # 6 CPU cores
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+      - "5901:5901"
+    volumes:
+      - ./Bliss-v7.2-android_x86:/build:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: '8.0'
+        reservations:
+          memory: 8G
+          cpus: '4.0'

@@ -1,0 +1,163 @@
+FROM ubuntu:20.04
+
+MAINTAINER Your Name <your-email@example.com>
+
+# Enable Ubuntu mirrors for faster downloads and performance optimizations
+RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.kernel.org|g' /etc/apt/sources.list && \
+    echo 'APT::Install-Recommends "false";' > /etc/apt/apt.conf.d/99no-recommends && \
+    echo 'APT::Install-Suggests "false";' >> /etc/apt/apt.conf.d/99no-recommends && \
+    echo 'APT::Get::Assume-Yes "true";' >> /etc/apt/apt.conf.d/99no-recommends
+
+###
+# Desktop/BASE noVNC for Bliss OS
+###
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=EET \
+    HOME=/root \
+    DISPLAY_WIDTH=1920 \
+    DISPLAY_HEIGHT=1080 \
+    WEB_LISTENING_PORT=5800 \
+    VNC_LISTENING_PORT=5900
+
+RUN apt-get update && \
+    apt-get -yq dist-upgrade && \
+    apt-get install -yq --no-install-recommends \
+    wget \
+    curl \
+    bzip2 \
+    ca-certificates \
+    apt-utils \
+    software-properties-common \
+    openssl \
+    tini \
+    pwgen \
+    sudo \
+    netcat \
+    vim-tiny \
+    net-tools \
+    sed \
+    jq \
+    npm \
+    unzip \
+    python3-pip \
+    xterm \
+    supervisor \
+    socat \
+    x11vnc \
+    openbox \
+    feh \
+    menu \
+    python-numpy \
+    net-tools \
+    ffmpeg \
+    jq \
+    qemu-kvm \
+    qemu-system-x86 \
+    libvirt-daemon-system \
+    libvirt-clients \
+    virtinst \
+    virt-manager \
+    bridge-utils \
+    build-essential \
+    iputils-ping \
+    lxde \
+    lxde-common \
+    xterm \
+    xfce4-terminal \
+    firefox \
+    htop \
+    screen \
+    ovmf \
+    qemu-utils
+
+# create a bliss user
+RUN useradd --create-home --shell /bin/bash --user-group bliss
+RUN echo "bliss:bliss" | chpasswd
+RUN usermod -aG libvirt bliss
+RUN usermod -aG kvm bliss
+RUN usermod -aG sudo bliss
+RUN echo "bliss ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Create build directory for Bliss OS files
+RUN mkdir -p /build
+
+# Copy Bliss OS files (this will be overridden by volume mount at runtime)
+COPY Bliss-v7.2-android_x86/ /build/
+
+# Set permissions
+RUN chown -R bliss:bliss /build
+
+# Install TigerVNC
+RUN apt-get install -y \
+    tigervnc-standalone-server \
+    tigervnc-xorg-extension
+
+# Copy supervisor config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Config directory removed - using built-in noVNC
+
+# Build noVNC
+ARG NOVNC_VERSION=1.4.0
+ARG NOVNC_URL=https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz
+RUN npm install clean-css-cli -g
+
+# packages websockify will need
+RUN pip3 install \
+    numpy \
+    jwcrypto \
+    psutil
+
+# Install noVNC
+RUN mkdir /noVNC && \
+    curl -# -L ${NOVNC_URL} | tar -xz --strip 1 -C /noVNC
+COPY Bliss-v7.2-android_x86/index.html /noVNC/bliss-index.html
+
+# Install simple HTTP server for the main index
+RUN pip3 install flask
+
+WORKDIR /tmp
+# Install websockify
+RUN wget https://github.com/novnc/websockify/archive/refs/tags/v0.11.0.tar.gz -O /tmp/websockify.tgz && \
+    tar -zxf /tmp/websockify.tgz && \
+    rm /tmp/websockify.tgz && \
+    cd /tmp/websockify*  && \
+    python3 setup.py install
+
+    # Set version of CSS and JavaScript file URLs (optional - noVNC has default index.html)
+RUN if [ -f /noVNC/index.html ]; then sed "s/UNIQUE_VERSION/$(date | md5sum | cut -c1-10)/g" -i /noVNC/index.html; fi
+
+EXPOSE 6080
+
+### RDP ###
+RUN apt install -y xrdp
+RUN touch /var/log/xrdp-sesman.log && touch /var/log/xrdp.log
+RUN chmod +66 /var/log/xrdp-sesman.log
+RUN chmod +66 /var/log/xrdp.log
+RUN mkdir /var/run/xrdp
+RUN chown xrdp:xrdp /var/run/xrdp
+RUN chmod +777 /var/run/xrdp
+RUN chown bliss:bliss -R /etc/xrdp
+
+EXPOSE 3350
+EXPOSE 3389
+
+# Create boot script for Bliss OS
+RUN mkdir -p /home/bliss/
+COPY boot-bliss.sh /home/bliss/boot-bliss.sh
+COPY web_server.py /home/bliss/web_server.py
+RUN chmod +x /home/bliss/boot-bliss.sh
+RUN chmod +x /home/bliss/web_server.py
+
+# Cleanup
+RUN apt-get autoremove -y && \
+    apt-get clean
+
+# Add start script
+ADD start-bliss-vnc.sh /usr/local/bin/start-bliss-vnc.sh
+RUN chmod +x /usr/local/bin/start-bliss-vnc.sh
+
+ENTRYPOINT ["tini", "--"]
+CMD ["/usr/local/bin/start-bliss-vnc.sh"]
+
+WORKDIR /home/bliss
