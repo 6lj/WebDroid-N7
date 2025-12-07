@@ -1,0 +1,26 @@
+# Exclude large Bliss OS files from build context to speed up builds
+Bliss-v7.2-android_x86/*.iso
+Bliss-v7.2-android_x86/*.sfs
+Bliss-v7.2-android_x86/*.img
+Bliss-v7.2-android_x86/*.qcow2
+
+# Exclude build scripts and documentation
+*.md
+*.bat
+*.ps1
+build-and-run.*
+README*
+
+# Include config files needed for build
+!config/
+
+# Keep essential Bliss OS files for build context (small files only)
+!Bliss-v7.2-android_x86/
+!Bliss-v7.2-android_x86/kernel
+!Bliss-v7.2-android_x86/initrd.img
+!Bliss-v7.2-android_x86/ramdisk.img
+!Bliss-v7.2-android_x86/index.html
+!Bliss-v7.2-android_x86/TRANS.TBL
+!Bliss-v7.2-android_x86/boot/
+!Bliss-v7.2-android_x86/efi/
+!Bliss-v7.2-android_x86/isolinux/
